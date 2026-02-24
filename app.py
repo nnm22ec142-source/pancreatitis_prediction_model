@@ -3,46 +3,83 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
+# --- CLINICAL SCANDINAVIAN DESIGN ---
 st.set_page_config(page_title="AP Severity Predictor", layout="centered")
+
+st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(180deg, #001f3f 0%, #003366 30%, #ffffff 100%);
+        background-attachment: fixed;
+    }
+    .main {
+        background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
+    }
+    /* Adding the Stethoscope Backdrop */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url("https://images.unsplash.com/photo-1584982223264-7413cf546ea0?q=80&w=2070&auto=format&fit=crop");
+        background-size: cover;
+        background-position: center;
+        opacity: 0.1; /* Keeps it subtle so you can read the text */
+        z-index: -1;
+    }
+    h1, h3 {
+        color: #ffffff;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    }
+    .stNumberInput label, .stSelectbox label {
+        color: #1e293b !important;
+        font-weight: bold;
+    }
+    .stForm {
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    .stButton>button {
+        background-color: #003366;
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 3em;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #001f3f;
+        border: 1px solid white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 @st.cache_resource
 def train_model():
-    # 1. Load Data
     df = pd.read_csv('data.csv')
-    
-    # 2. Select the 8 requested features + Target
-    # Mapping requested names to CSV column names
-    mapping = {
-        'Age': 'Age',
-        'Sex': 'Sex',
-        'Etiology': 'Etiology',
-        'S amylase': 'S amylase',
-        'S. Lipase': 'S. Lipase',
-        'Calcium': 'Calcium',
-        'Crp': 'Crp',
-        'S albumin': 'S albumin'
-    }
     target_col = 'Severity of pancreatitis as per Atlanta'
+    mapping = {
+        'Age': 'Age', 'Sex': 'Sex', 'Etiology': 'Etiology',
+        'S amylase': 'S amylase', 'S. Lipase': 'S. Lipase',
+        'Calcium': 'Calcium', 'Crp': 'Crp', 'S albumin': 'S albumin'
+    }
     
     features = list(mapping.values())
     df_model = df[features + [target_col]].copy()
-    
-    # 3. Clean Target Column
     df_model = df_model.dropna(subset=[target_col])
-    # Standardize categories
     df_model[target_col] = df_model[target_col].str.strip()
-    df_model[target_col] = df_model[target_col].replace({
-        'Moderately severe': 'Moderate',
-        'Moderately severe ': 'Moderate',
-        'Option 4': 'Moderate' # Fallback for outliers
-    })
 
-    # 4. Clean Features
-    # Convert Sex and Etiology to categories
+    # Standardization
+    df_model[target_col] = df_model[target_col].replace({'Moderately severe': 'Moderate', 'Moderately severe ': 'Moderate'})
     df_model['Sex'] = df_model['Sex'].fillna('Male')
     df_model['Etiology'] = df_model['Etiology'].fillna('Alcohol')
     
-    # Clean numeric columns (handle cases like "37.5 C" or "Afebrile")
     def clean_num(val):
         try: return float(val)
         except: 
@@ -55,7 +92,6 @@ def train_model():
         df_model[col] = df_model[col].apply(clean_num)
         df_model[col] = df_model[col].fillna(df_model[col].median())
 
-    # 5. Encoding and Training
     X = pd.get_dummies(df_model[features], columns=['Sex', 'Etiology'])
     y = df_model[target_col]
     
@@ -64,55 +100,47 @@ def train_model():
     
     return model, X.columns, df['Etiology'].dropna().unique().tolist()
 
-try:
-    model, model_columns, etiology_options = train_model()
-except Exception as e:
-    st.error(f"Error initializing model: {e}")
-    st.stop()
+model, model_columns, etiology_options = train_model()
 
 # --- GUI ---
-st.title("🏥 Acute Pancreatitis Severity Predictor")
-st.write("Enter the 8 clinical parameters to predict severity.")
+st.title("🏥 Clinical Severity Predictor")
+st.markdown("### Acute Pancreatitis Risk Assessment")
 
 with st.form("input_form"):
     col1, col2 = st.columns(2)
     
     with col1:
-        age = st.number_input("Age", min_value=1, max_value=120, value=45)
-        sex = st.selectbox("Sex", options=["Male", "Female"])
+        age = st.number_input("Patient Age", min_value=0, max_value=120, value=0)
+        sex = st.selectbox("Biological Sex", options=["Male", "Female"])
         etiology = st.selectbox("Etiology", options=sorted(etiology_options))
-        albumin = st.number_input("S. Albumin (g/dL)", value=3.5)
+        albumin = st.number_input("Serum Albumin (g/dL)", min_value=0.0, value=0.0, format="%.1f")
         
     with col2:
-        amylase = st.number_input("S. Amylase (U/L)", value=100.0)
-        lipase = st.number_input("S. Lipase (U/L)", value=100.0)
-        calcium = st.number_input("Calcium (mg/dL)", value=9.0)
-        crp = st.number_input("CRP (mg/L)", value=10.0)
+        amylase = st.number_input("Serum Amylase (U/L)", min_value=0.0, value=0.0)
+        lipase = st.number_input("Serum Lipase (U/L)", min_value=0.0, value=0.0)
+        calcium = st.number_input("Total Calcium (mg/dL)", min_value=0.0, value=0.0, format="%.1f")
+        crp = st.number_input("CRP (mg/L)", min_value=0.0, value=0.0)
 
-    submit = st.form_submit_button("Predict Severity")
+    submit = st.form_submit_button("RUN DIAGNOSTIC PREDICTION")
 
 if submit:
-    # Build input row
-    input_data = pd.DataFrame([{
-        'Age': age,
-        'S amylase': amylase,
-        'S. Lipase': lipase,
-        'Calcium': calcium,
-        'Crp': crp,
-        'S albumin': albumin,
-        f'Sex_{sex}': 1,
-        f'Etiology_{etiology}': 1
-    }])
-    
-    # Align with training columns (fill missing dummy columns with 0)
-    input_df = input_data.reindex(columns=model_columns, fill_value=0)
-    
-    prediction = model.predict(input_df)[0]
-    
-    st.divider()
-    if prediction == "Severe":
-        st.error(f"### Predicted Severity: {prediction}")
-    elif prediction == "Moderate":
-        st.warning(f"### Predicted Severity: {prediction}")
+    inputs = [age, albumin, amylase, lipase, calcium, crp]
+    if any(v <= 0 for v in inputs):
+        st.error("⚠️ **Input Missing:** All parameters must be clinical values greater than 0.")
     else:
-        st.success(f"### Predicted Severity: {prediction}")
+        input_data = pd.DataFrame([{
+            'Age': age, 'S amylase': amylase, 'S. Lipase': lipase,
+            'Calcium': calcium, 'Crp': crp, 'S albumin': albumin,
+            f'Sex_{sex}': 1, f'Etiology_{etiology}': 1
+        }])
+        
+        input_df = input_data.reindex(columns=model_columns, fill_value=0)
+        prediction = model.predict(input_df)[0]
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if prediction == "Severe":
+            st.error(f"## PREDICTED SEVERITY: {prediction.upper()}")
+        elif prediction == "Moderate":
+            st.warning(f"## PREDICTED SEVERITY: {prediction.upper()}")
+        else:
+            st.success(f"## PREDICTED SEVERITY: {prediction.upper()}")
