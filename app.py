@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
-# --- CLINICAL SCANDINAVIAN DESIGN ---
-st.set_page_config(page_title="AP Severity Predictor", layout="centered")
+# --- CLINICAL DARK BLUE THEME ---
+st.set_page_config(page_title="Comprehensive AP Predictor", layout="wide")
 
 st.markdown("""
     <style>
@@ -12,135 +12,99 @@ st.markdown("""
         background: linear-gradient(180deg, #001f3f 0%, #003366 30%, #ffffff 100%);
         background-attachment: fixed;
     }
-    .main {
-        background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
-    }
-    /* Adding the Stethoscope Backdrop */
     .stApp::before {
         content: "";
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        top: 0; left: 0; width: 100%; height: 100%;
         background-image: url("https://images.unsplash.com/photo-1584982223264-7413cf546ea0?q=80&w=2070&auto=format&fit=crop");
-        background-size: cover;
-        background-position: center;
-        opacity: 0.1; /* Keeps it subtle so you can read the text */
-        z-index: -1;
-    }
-    h1, h3 {
-        color: #ffffff;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    }
-    .stNumberInput label, .stSelectbox label {
-        color: #1e293b !important;
-        font-weight: bold;
+        background-size: cover; background-position: center;
+        opacity: 0.08; z-index: -1;
     }
     .stForm {
-        background-color: rgba(255, 255, 255, 0.9);
-        padding: 20px;
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 30px;
         border-radius: 15px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     }
-    .stButton>button {
-        background-color: #003366;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        height: 3em;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #001f3f;
-        border: 1px solid white;
-    }
+    h1, h2, h3 { color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+    .section-head { color: #003366; font-weight: bold; border-bottom: 2px solid #003366; margin-top: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
 @st.cache_resource
-def train_model():
+def train_full_model():
     df = pd.read_csv('data.csv')
     target_col = 'Severity of pancreatitis as per Atlanta'
-    mapping = {
-        'Age': 'Age', 'Sex': 'Sex', 'Etiology': 'Etiology',
-        'S amylase': 'S amylase', 'S. Lipase': 'S. Lipase',
-        'Calcium': 'Calcium', 'Crp': 'Crp', 'S albumin': 'S albumin'
-    }
     
-    features = list(mapping.values())
-    df_model = df[features + [target_col]].copy()
-    df_model = df_model.dropna(subset=[target_col])
-    df_model[target_col] = df_model[target_col].str.strip()
+    # 1. Define columns to exclude from training
+    exclude = ['Timestamp', 'Ip number', 'S.No', 'BMI 2', 'Etiology', 'Sex']
+    
+    # 2. Clean Target
+    df = df.dropna(subset=[target_col])
+    df[target_col] = df[target_col].str.strip().replace({
+        'Moderately severe': 'Moderate', 'Moderately severe ': 'Moderate', 'Option 4': 'Moderate'
+    })
 
-    # Standardization
-    df_model[target_col] = df_model[target_col].replace({'Moderately severe': 'Moderate', 'Moderately severe ': 'Moderate'})
-    df_model['Sex'] = df_model['Sex'].fillna('Male')
-    df_model['Etiology'] = df_model['Etiology'].fillna('Alcohol')
-    
+    # 3. Clean all numeric features
     def clean_num(val):
         try: return float(val)
-        except: 
+        except:
             import re
             res = re.findall(r"[-+]?\d*\.\d+|\d+", str(val))
             return float(res[0]) if res else np.nan
 
-    num_cols = ['Age', 'S amylase', 'S. Lipase', 'Calcium', 'Crp', 'S albumin']
-    for col in num_cols:
-        df_model[col] = df_model[col].apply(clean_num)
-        df_model[col] = df_model[col].fillna(df_model[col].median())
-
-    X = pd.get_dummies(df_model[features], columns=['Sex', 'Etiology'])
-    y = df_model[target_col]
+    feature_cols = [c for c in df.columns if c not in exclude + [target_col]]
     
+    # Process features
+    X = df[feature_cols].copy()
+    for col in X.columns:
+        if X[col].dtype == 'object':
+            X[col] = X[col].apply(clean_num)
+        X[col] = X[col].fillna(X[col].median())
+
     model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X, y)
+    model.fit(X, y=df[target_col])
     
-    return model, X.columns, df['Etiology'].dropna().unique().tolist()
+    return model, feature_cols, df[target_col].unique()
 
-model, model_columns, etiology_options = train_model()
+model, feature_names, classes = train_full_model()
 
-# --- GUI ---
-st.title("🏥 Clinical Severity Predictor")
-st.markdown("### Acute Pancreatitis Risk Assessment")
+st.title("🏥 Comprehensive Acute Pancreatitis Diagnostic")
+st.write("Full-parameter risk stratification tool.")
 
-with st.form("input_form"):
-    col1, col2 = st.columns(2)
+with st.form("main_form"):
+    # Organize 38 columns into a grid
+    st.markdown("<div class='section-head'>Patient Clinical & Lab Parameters</div>", unsafe_allow_html=True)
     
-    with col1:
-        age = st.number_input("Patient Age", min_value=0, max_value=120, value=0)
-        sex = st.selectbox("Biological Sex", options=["Male", "Female"])
-        etiology = st.selectbox("Etiology", options=sorted(etiology_options))
-        albumin = st.number_input("Serum Albumin (g/dL)", min_value=0.0, value=0.0, format="%.1f")
+    # Create 4 columns for a dense but readable grid
+    cols = st.columns(4)
+    user_inputs = {}
+    
+    for i, name in enumerate(feature_names):
+        # Shorten the label if it's the long SIRS/BISAP description
+        display_label = name.split('\n')[0][:30] + "..." if len(name) > 30 else name
         
-    with col2:
-        amylase = st.number_input("Serum Amylase (U/L)", min_value=0.0, value=0.0)
-        lipase = st.number_input("Serum Lipase (U/L)", min_value=0.0, value=0.0)
-        calcium = st.number_input("Total Calcium (mg/dL)", min_value=0.0, value=0.0, format="%.1f")
-        crp = st.number_input("CRP (mg/L)", min_value=0.0, value=0.0)
+        with cols[i % 4]:
+            user_inputs[name] = st.number_input(display_label, value=0.0, help=name)
 
-    submit = st.form_submit_button("RUN DIAGNOSTIC PREDICTION")
+    st.markdown("<br>", unsafe_allow_html=True)
+    submit = st.form_submit_button("GENERATE COMPREHENSIVE ASSESSMENT")
 
 if submit:
-    inputs = [age, albumin, amylase, lipase, calcium, crp]
-    if any(v <= 0 for v in inputs):
-        st.error("⚠️ **Input Missing:** All parameters must be clinical values greater than 0.")
+    input_df = pd.DataFrame([user_inputs])
+    prediction = model.predict(input_df)[0]
+    
+    st.markdown("---")
+    if prediction == "Severe":
+        st.error(f"## ASSESSMENT RESULT: {prediction.upper()}")
+        st.info("**Clinical Note:** Persistent organ failure indicated. Urgent intervention required.")
+    elif prediction == "Moderate":
+        st.warning(f"## ASSESSMENT RESULT: {prediction.upper()}")
     else:
-        input_data = pd.DataFrame([{
-            'Age': age, 'S amylase': amylase, 'S. Lipase': lipase,
-            'Calcium': calcium, 'Crp': crp, 'S albumin': albumin,
-            f'Sex_{sex}': 1, f'Etiology_{etiology}': 1
-        }])
-        
-        input_df = input_data.reindex(columns=model_columns, fill_value=0)
-        prediction = model.predict(input_df)[0]
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if prediction == "Severe":
-            st.error(f"## PREDICTED SEVERITY: {prediction.upper()}")
-        elif prediction == "Moderate":
-            st.warning(f"## PREDICTED SEVERITY: {prediction.upper()}")
-        else:
-            st.success(f"## PREDICTED SEVERITY: {prediction.upper()}")
+        st.success(f"## ASSESSMENT RESULT: {prediction.upper()}")
+
+# --- SIDEBAR INFORMATION ---
+with st.sidebar:
+    st.header("Severity Reference")
+    st.write("**Mild:** No organ failure.")
+    st.write("**Moderate:** Transient organ failure (<48h).")
+    st.write("**Severe:** Persistent organ failure (>48h).")
