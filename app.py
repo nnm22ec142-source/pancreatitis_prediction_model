@@ -8,28 +8,82 @@ st.set_page_config(page_title="Comprehensive AP Predictor", layout="wide")
 
 st.markdown("""
     <style>
+    /* Gradient Background */
     .stApp {
-        background: linear-gradient(180deg, #001f3f 0%, #003366 30%, #ffffff 100%);
+        background: linear-gradient(180deg, #001f3f 0%, #003366 35%, #ffffff 100%);
         background-attachment: fixed;
     }
+    
+    /* Stethoscope Watermark */
     .stApp::before {
         content: "";
         position: fixed;
         top: 0; left: 0; width: 100%; height: 100%;
         background-image: url("https://images.unsplash.com/photo-1584982223264-7413cf546ea0?q=80&w=2070&auto=format&fit=crop");
         background-size: cover; background-position: center;
-        opacity: 0.08; z-index: -1;
+        opacity: 0.12; z-index: -1;
     }
+
+    /* Main Header - Pure White for Contrast */
+    h1 {
+        color: #ffffff !important;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-weight: 700;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+        text-align: center;
+    }
+
+    /* Subheaders and Descriptions - Light Sky Blue */
+    h3, .stMarkdown p {
+        color: #e0f2fe !important;
+        text-align: center;
+    }
+
+    /* Form Container */
     .stForm {
-        background-color: rgba(255, 255, 255, 0.95);
-        padding: 30px;
-        border-radius: 15px;
+        background-color: rgba(255, 255, 255, 0.96);
+        padding: 40px;
+        border-radius: 20px;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
     }
-    h1, h2, h3 { color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
-    .section-head { color: #003366; font-weight: bold; border-bottom: 2px solid #003366; margin-top: 20px; }
+
+    /* Input Labels - Deep Navy for readability on white */
+    .stNumberInput label, .stSelectbox label {
+        color: #003366 !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* Section Headings inside the form */
+    .section-head {
+        color: #0369a1;
+        font-size: 1.2rem;
+        font-weight: bold;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 20px;
+        padding-bottom: 5px;
+    }
+
+    /* Professional Button */
+    .stButton>button {
+        background: linear-gradient(90deg, #003366 0%, #0369a1 100%);
+        color: white !important;
+        font-weight: bold;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 10px;
+        width: 100%;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stButton>button:hover {
+        background: #001f3f;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        color: #ffffff !important;
+    }
     </style>
     """, unsafe_allow_html=True)
-
 @st.cache_resource
 def train_full_model():
     df = pd.read_csv('data.csv')
@@ -108,3 +162,4 @@ with st.sidebar:
     st.write("**Mild:** No organ failure.")
     st.write("**Moderate:** Transient organ failure (<48h).")
     st.write("**Severe:** Persistent organ failure (>48h).")
+
