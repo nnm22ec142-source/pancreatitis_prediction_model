@@ -22,10 +22,8 @@ st.markdown("""
         opacity: 0.1; z-index: -1;
     }
     h1 { color: #ffffff !important; text-shadow: 2px 2px 8px rgba(0,0,0,0.6); text-align: center; }
-    h3 { color: #e0f2fe !important; text-align: center; }
     .stForm { background-color: rgba(255, 255, 255, 0.96); padding: 40px; border-radius: 20px; }
-    .stNumberInput label, .stSelectbox label { color: #003366 !important; font-weight: 600 !important; }
-    .stButton>button { background: linear-gradient(90deg, #003366 0%, #0369a1 100%); color: white !important; border-radius: 10px; width: 100%; height: 3em; font-weight: bold; }
+    .stNumberInput label, .stSelectbox label, .stCheckbox label { color: #003366 !important; font-weight: 600 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -33,22 +31,15 @@ st.markdown("""
 @st.cache_resource
 def train_model():
     df = pd.read_csv('data.csv')
-    
-    # Remove last column if it's an 'Unnamed' or NA column
     if df.columns[-1].startswith('Unnamed') or df.iloc[:, -1].isna().all():
         df = df.iloc[:, :-1]
     
-    # Identify target and etiology columns (flexible naming)
     target_col = [c for c in df.columns if 'severity' in c.lower() and 'atlanta' in c.lower()][0]
     etiology_col = [c for c in df.columns if 'etiology' in c.lower()][0]
     sex_col = [c for c in df.columns if 'sex' in c.lower()][0]
 
     df = df.dropna(subset=[target_col])
-    
-    # Filter out 'ctsi' from etiology
     df = df[~df[etiology_col].str.contains('ctsi|CTSI', na=False)]
-    
-    # Standardize target
     df[target_col] = df[target_col].str.strip().replace({'Moderately severe': 'Moderate', 'Moderately severe ': 'Moderate'})
 
     exclude = ['Timestamp', 'Ip number', 'S.No', 'BMI 2', target_col, etiology_col, sex_col]
@@ -68,7 +59,6 @@ def train_model():
         medians[col] = X_numeric[col].median()
         X_numeric[col] = X_numeric[col].fillna(medians[col])
 
-    # Categorical Encoding
     X_categorical = pd.get_dummies(df[[sex_col, etiology_col]])
     X_final = pd.concat([X_numeric, X_categorical], axis=1)
     
@@ -81,55 +71,59 @@ model, model_cols, training_medians, etiology_list, sex_name, etiology_name = tr
 
 # --- 3. UI ---
 st.markdown("<h1>🏥 ACUTE PANCREATITIS DIAGNOSTIC PORTAL</h1>", unsafe_allow_html=True)
-st.markdown("### Decision Support System for Clinical Risk Stratification")
 
 with st.form("clinical_form"):
-    st.info("💡 LDH and CRP are optional. Duration should be entered in days.")
+    st.info("💡 LDH and CRP are optional. Temperature can be set to 'Afebrile' or input manually.")
     
-    # Numeric Inputs
     cols = st.columns(3)
     numeric_inputs = {}
     
-    # Filter out the one-hot columns for manual dropdown handling
+    # Filter numeric features
     base_numeric_features = [c for c in model_cols if not (c.startswith(sex_name) or c.startswith(etiology_name))]
     
+    # Identify the Temperature column
+    temp_col_name = [c for c in base_numeric_features if 'temp' in c.lower()]
+    temp_col_name = temp_col_name[0] if temp_col_name else None
+
     for i, name in enumerate(base_numeric_features):
         label = name.split('\n')[0]
         if len(label) > 35: label = label[:32] + "..."
-        is_optional = any(opt in name.upper() for opt in ["LDH", "CRP"])
         
         with cols[i % 3]:
-            numeric_inputs[name] = st.number_input(f"{label} {'(Optional)' if is_optional else ''}", value=0.0)
+            # Handle Temperature Logic separately
+            if name == temp_col_name:
+                is_afebrile = st.checkbox("Patient is Afebrile")
+                if is_afebrile:
+                    numeric_inputs[name] = 37.0  # Standard afebrile temp in Celsius
+                    st.write("Temp set to 37.0°C")
+                else:
+                    numeric_inputs[name] = st.number_input(label, value=0.0, step=0.1)
+            else:
+                is_optional = any(opt in name.upper() for opt in ["LDH", "CRP"])
+                numeric_inputs[name] = st.number_input(f"{label} {'(Optional)' if is_optional else ''}", value=0.0)
 
-    st.markdown("<div style='margin: 20px 0; border-bottom: 1px solid #ddd;'></div>", unsafe_allow_html=True)
-    
-    # Categorical Inputs (Etiology and Sex)
+    st.markdown("<hr>", unsafe_allow_html=True)
     cat_col1, cat_col2 = st.columns(2)
-    with cat_col1:
-        selected_sex = st.selectbox("Patient Sex", ["Male", "Female"])
-    with cat_col2:
-        selected_etiology = st.selectbox("Etiology (Cause)", sorted(etiology_list))
+    with cat_col1: selected_sex = st.selectbox("Patient Sex", ["Male", "Female"])
+    with cat_col2: selected_etiology = st.selectbox("Etiology", sorted(etiology_list))
 
     submit = st.form_submit_button("GENERATE CLINICAL ASSESSMENT")
 
 # --- 4. PREDICTION ---
 if submit:
-    # Build input row
     input_row = {col: 0.0 for col in model_cols}
     
-    # Fill Numeric
     missing_mandatory = False
     for name, val in numeric_inputs.items():
         if val <= 0 and not any(opt in name.upper() for opt in ["LDH", "CRP"]):
             missing_mandatory = True
-        elif val <= 0: # Optional missing
+        elif val <= 0:
             input_row[name] = training_medians.get(name, 0.0)
         else:
             input_row[name] = val
             
-    # Fill Categorical
-    sex_key = f"{sex_name}_{selected_sex}"
-    eti_key = f"{etiology_name}_{selected_etiology}"
+    # Add Categories
+    sex_key, eti_key = f"{sex_name}_{selected_sex}", f"{etiology_name}_{selected_etiology}"
     if sex_key in input_row: input_row[sex_key] = 1.0
     if eti_key in input_row: input_row[eti_key] = 1.0
 
@@ -139,9 +133,7 @@ if submit:
         input_df = pd.DataFrame([input_row])[model_cols]
         prediction = model.predict(input_df)[0]
         
-        st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown("<h2 style='color:#003366; text-align:center;'>Clinical Assessment Result</h2>", unsafe_allow_html=True)
-        
         if "Severe" in str(prediction):
             st.error(f"### Result: {prediction.upper()}")
         elif "Moderate" in str(prediction):
